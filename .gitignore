@@ -87,9 +87,6 @@ typings/
 # pnpm link folder
 pnpm-global
 
-# npm lock file (project uses pnpm)
-package-lock.json
-
 # dotenv environment variables file
 .env
 .env.test
