@@ -6,11 +6,16 @@
  * 2. 图片压缩 - 调整图片质量以减小文件体积
  * 3. 复制Base64 - 将图片转换为Base64编码字符串
  * 4. 批量改格式 - 将图片转换为指定格式（PNG/JPEG/WebP）
+ * 5. GIF制作 - 将多张图片合成为GIF动画（FFmpeg驱动）
+ * 6. GIF分解 - 将GIF动画分解为逐帧图片（FFmpeg驱动）
+ * 7. 添加水印 - 批量为图片添加文字水印（FFmpeg驱动，Canvas回退）
  * 
- * 所有功能均为纯前端Canvas API实现，不依赖后端服务
+ * 前4个功能使用纯前端Canvas API实现，不依赖后端服务
+ * 后3个功能使用FFmpeg.wasm实现，需要加载WebAssembly核心
  */
 
 import { WindowManager } from '../core/WindowManager';
+import { FFmpegLoader, FFmpegLoadingStatus } from '../core/FFmpegLoader';
 
 /** 图片文件信息接口 - 存储已上传图片的原始数据和元信息 */
 interface ImageFileInfo {
@@ -67,6 +72,9 @@ export class ImageToolsApp {
           <button class="pc-btn img-tools-tab" data-tab="compress" style="padding:4px 10px;font-size:11px;background:transparent;border-left:2px solid transparent;">📦 图片压缩</button>
           <button class="pc-btn img-tools-tab" data-tab="base64" style="padding:4px 10px;font-size:11px;background:transparent;border-left:2px solid transparent;">📋 复制Base64</button>
           <button class="pc-btn img-tools-tab" data-tab="convert" style="padding:4px 10px;font-size:11px;background:transparent;border-left:2px solid transparent;">🔄 批量改格式</button>
+          <button class="pc-btn img-tools-tab" data-tab="gifmaker" style="padding:4px 10px;font-size:11px;background:transparent;border-left:2px solid transparent;">🎞️ GIF制作</button>
+          <button class="pc-btn img-tools-tab" data-tab="gifsplitter" style="padding:4px 10px;font-size:11px;background:transparent;border-left:2px solid transparent;">✂️ GIF分解</button>
+          <button class="pc-btn img-tools-tab" data-tab="watermark" style="padding:4px 10px;font-size:11px;background:transparent;border-left:2px solid transparent;">💧 添加水印</button>
         </div>
 
         <!-- ====== 面板容器 ====== -->
@@ -90,6 +98,21 @@ export class ImageToolsApp {
           <!-- ====== 标签4: 批量改格式 ====== -->
           <div class="img-tools-panel" data-panel="convert" style="height:100%;overflow-y:auto;display:none;">
             ${this.buildConvertPanel()}
+          </div>
+
+          <!-- ====== 标签5: GIF制作 ====== -->
+          <div class="img-tools-panel" data-panel="gifmaker" style="height:100%;overflow-y:auto;display:none;">
+            ${this.buildGifMakerPanel()}
+          </div>
+
+          <!-- ====== 标签6: GIF分解 ====== -->
+          <div class="img-tools-panel" data-panel="gifsplitter" style="height:100%;overflow-y:auto;display:none;">
+            ${this.buildGifSplitterPanel()}
+          </div>
+
+          <!-- ====== 标签7: 添加水印 ====== -->
+          <div class="img-tools-panel" data-panel="watermark" style="height:100%;overflow-y:auto;display:none;">
+            ${this.buildWatermarkPanel()}
           </div>
 
         </div>
@@ -266,6 +289,15 @@ export class ImageToolsApp {
 
     /* ====== 标签4: 批量改格式事件 ====== */
     this.bindConvertPanel(el);
+
+    /* ====== 标签5: GIF制作事件 ====== */
+    this.bindGifMakerPanel(el);
+
+    /* ====== 标签6: GIF分解事件 ====== */
+    this.bindGifSplitterPanel(el);
+
+    /* ====== 标签7: 添加水印事件 ====== */
+    this.bindWatermarkPanel(el);
   }
 
   /**
@@ -1084,6 +1116,992 @@ export class ImageToolsApp {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     });
+  }
+
+  // ================================================================
+  //  标签5: GIF制作 - 相关方法和事件绑定
+  // ================================================================
+
+  /** FFmpeg加载管理器的单例引用，用于执行GIF制作、分解和水印操作 */
+  private ffmpegLoader: FFmpegLoader = FFmpegLoader.getInstance();
+
+  /** GIF制作面板已上传的图片文件列表 */
+  private gifMakerFiles: File[] = [];
+
+  /** GIF制作面板的处理状态，防止重复点击开始按钮 */
+  private gifMakerProcessing: boolean = false;
+
+  /**
+   * 构建GIF制作面板的HTML
+   * 包含FFmpeg加载状态指示器、拖拽上传区域、帧延迟设置、输出宽度设置、
+   * 循环次数设置、开始制作按钮和缩略图预览列表
+   * @returns GIF制作面板的HTML字符串
+   */
+  private buildGifMakerPanel(): string {
+    return `
+      <!-- FFmpeg加载状态指示器 - 显示当前FFmpeg核心是否已加载就绪 -->
+      <div class="gifmaker-ffmpeg-status" style="font-size:11px;color:var(--pc-neon-yellow);margin-bottom:6px;padding:4px 8px;border:1px solid var(--pc-dark-gray);background:rgba(0,0,0,0.5);">
+        FFmpeg 状态：未加载
+      </div>
+
+      <!-- 拖拽上传区域 - 支持多张图片（PNG/JPEG/WebP） -->
+      <div class="img-drop-zone gifmaker-drop" style="border:2px dashed var(--pc-pink);padding:20px;text-align:center;margin-bottom:10px;cursor:pointer;color:var(--pc-gray);font-size:12px;">
+        📁 将多张图片拖拽到这里，或点击选择文件（PNG/JPEG/WebP）<br>
+        <input type="file" multiple accept="image/png,image/jpeg,image/webp" class="gifmaker-file-input" style="display:none;">
+      </div>
+
+      <!-- GIF参数设置区域 -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;flex-wrap:wrap;">
+        <span style="color:var(--pc-gray);">帧延迟:</span>
+        <input type="number" class="pc-input gifmaker-delay" value="100" min="10" max="5000" style="width:70px;">
+        <span style="color:var(--pc-gray);">ms</span>
+        <span style="color:var(--pc-dark-gray);font-size:10px;">(10fps)</span>
+        <span style="color:var(--pc-gray);margin-left:8px;">输出宽度:</span>
+        <input type="number" class="pc-input gifmaker-width" value="480" min="16" max="3840" style="width:70px;">
+        <span style="color:var(--pc-gray);">px</span>
+        <span style="color:var(--pc-gray);margin-left:8px;">循环:</span>
+        <input type="number" class="pc-input gifmaker-loop" value="0" min="0" max="999" style="width:60px;">
+        <span style="color:var(--pc-dark-gray);font-size:10px;">(0=无限)</span>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+        <button class="glow-btn gifmaker-start" style="padding:4px 16px;font-size:12px;">开始制作</button>
+        <span class="gifmaker-status" style="font-size:12px;"></span>
+      </div>
+
+      <!-- 已上传图片的缩略图预览列表 -->
+      <div class="gifmaker-preview-list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+    `;
+  }
+
+  /**
+   * 绑定GIF制作面板的所有事件
+   * 包括FFmpeg状态监听、拖拽上传、文件选择、开始制作按钮
+   * @param el 窗口内容区域的DOM根元素
+   */
+  private bindGifMakerPanel(el: HTMLElement): void {
+    const dropZone = el.querySelector('.gifmaker-drop') as HTMLElement;
+    const fileInput = el.querySelector('.gifmaker-file-input') as HTMLInputElement;
+    const startBtn = el.querySelector('.gifmaker-start') as HTMLElement;
+    const ffmpegStatus = el.querySelector('.gifmaker-ffmpeg-status') as HTMLElement;
+
+    /* 监听FFmpeg加载状态变化，实时更新面板顶部的状态指示器 */
+    this.ffmpegLoader.onStatusChange((status: FFmpegLoadingStatus) => {
+      if (status === FFmpegLoadingStatus.READY) {
+        ffmpegStatus.textContent = 'FFmpeg 状态：已就绪';
+        ffmpegStatus.style.color = 'var(--pc-neon-green)';
+      } else if (status === FFmpegLoadingStatus.LOADING) {
+        ffmpegStatus.textContent = 'FFmpeg 状态：加载中...';
+        ffmpegStatus.style.color = 'var(--pc-neon-yellow)';
+      } else if (status === FFmpegLoadingStatus.ERROR) {
+        ffmpegStatus.textContent = 'FFmpeg 状态：加载失败';
+        ffmpegStatus.style.color = 'var(--pc-hot-pink)';
+      }
+    });
+
+    /* 点击拖拽区域打开文件选择对话框 */
+    dropZone.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    /* 拖拽悬停高亮提示 */
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--pc-neon-green)';
+    });
+
+    /* 拖拽离开恢复样式 */
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.borderColor = 'var(--pc-pink)';
+    });
+
+    /* 拖拽放置文件后，收集图片文件并生成预览 */
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--pc-pink)';
+      const files = Array.from((e as DragEvent).dataTransfer?.files || []);
+      this.handleGifMakerFiles(el, files);
+    });
+
+    /* 文件选择后收集图片文件并生成预览 */
+    fileInput.addEventListener('change', () => {
+      const files = Array.from(fileInput.files || []);
+      this.handleGifMakerFiles(el, files);
+    });
+
+    /* 点击开始制作按钮，执行GIF制作流程 */
+    startBtn.addEventListener('click', async () => {
+      await this.doGifMaker(el);
+    });
+  }
+
+  /**
+   * 处理GIF制作面板的上传文件
+   * 过滤出PNG/JPEG/WebP图片文件，生成缩略图预览列表
+   * @param el 窗口内容区域的DOM根元素
+   * @param files 用户选择的File对象数组
+   */
+  private handleGifMakerFiles(el: HTMLElement, files: File[]): void {
+    /* 只接受PNG、JPEG、WebP格式的图片 */
+    this.gifMakerFiles = files.filter(f =>
+      f.type === 'image/png' || f.type === 'image/jpeg' || f.type === 'image/webp'
+    );
+
+    /* 清空状态文字 */
+    const statusEl = el.querySelector('.gifmaker-status') as HTMLElement;
+    statusEl.textContent = '';
+
+    this.renderGifMakerPreviews(el);
+  }
+
+  /**
+   * 渲染GIF制作面板的缩略图预览列表
+   * 为每张已上传图片创建缩略图卡片，显示序号、文件名和缩略图
+   * @param el 窗口内容区域的DOM根元素
+   */
+  private renderGifMakerPreviews(el: HTMLElement): void {
+    const list = el.querySelector('.gifmaker-preview-list') as HTMLElement;
+    list.innerHTML = '';
+
+    this.gifMakerFiles.forEach((file, index) => {
+      const card = document.createElement('div');
+      card.style.cssText = 'border:1px solid var(--pc-dark-gray);padding:6px;background:var(--pc-black);width:90px;text-align:center;position:relative;';
+
+      /* 帧序号标签 - 显示这是第几帧 */
+      const indexSpan = document.createElement('div');
+      indexSpan.style.cssText = 'font-size:10px;color:var(--pc-neon-green);margin-bottom:2px;';
+      indexSpan.textContent = `#${String(index + 1).padStart(3, '0')}`;
+      card.appendChild(indexSpan);
+
+      /* 创建缩略图 */
+      const thumb = document.createElement('img');
+      thumb.style.cssText = 'max-width:70px;max-height:70px;display:block;margin:0 auto 4px;image-rendering:pixelated;';
+      /* 使用URL.createObjectURL生成图片预览URL */
+      thumb.src = URL.createObjectURL(file);
+      card.appendChild(thumb);
+
+      /* 文件名（截取前10个字符） */
+      const nameSpan = document.createElement('div');
+      nameSpan.style.cssText = 'font-size:9px;color:var(--pc-gray);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      nameSpan.textContent = file.name.substring(0, 10);
+      card.appendChild(nameSpan);
+
+      list.appendChild(card);
+    });
+  }
+
+  /**
+   * 执行GIF制作流程
+   * 1. 加载FFmpeg核心
+   * 2. 将所有图片按序号写入虚拟文件系统（frame_001.png等）
+   * 3. 执行FFmpeg命令合成GIF
+   * 4. 读取输出文件并触发下载
+   * @param el 窗口内容区域的DOM根元素
+   */
+  private async doGifMaker(el: HTMLElement): Promise<void> {
+    /* 如果正在处理中或没有上传图片，直接返回 */
+    if (this.gifMakerProcessing) return;
+    if (this.gifMakerFiles.length === 0) return;
+
+    this.gifMakerProcessing = true;
+
+    const startBtn = el.querySelector('.gifmaker-start') as HTMLButtonElement;
+    const statusEl = el.querySelector('.gifmaker-status') as HTMLElement;
+    startBtn.disabled = true;
+    statusEl.textContent = '正在加载FFmpeg...';
+    statusEl.style.color = 'var(--pc-neon-yellow)';
+
+    try {
+      /* 第一步：加载FFmpeg核心（如果尚未加载） */
+      await this.ffmpegLoader.load();
+      statusEl.textContent = '正在写入帧文件...';
+
+      /* 第二步：将所有图片文件按序号写入FFmpeg虚拟文件系统 */
+      for (let i = 0; i < this.gifMakerFiles.length; i++) {
+        /* 文件名格式为frame_001.png、frame_002.png...，序号补零到3位 */
+        const frameName = `frame_${String(i + 1).padStart(3, '0')}.png`;
+        await this.ffmpegLoader.writeFile(frameName, this.gifMakerFiles[i]);
+      }
+
+      /* 第三步：读取用户设置的GIF参数 */
+      const delay = parseInt((el.querySelector('.gifmaker-delay') as HTMLInputElement).value) || 100;
+      const outputWidth = parseInt((el.querySelector('.gifmaker-width') as HTMLInputElement).value) || 480;
+      const loopCount = parseInt((el.querySelector('.gifmaker-loop') as HTMLInputElement).value) || 0;
+
+      /* 计算帧率：帧延迟（毫秒）转换为每秒帧数 */
+      const framerate = (1000 / delay).toFixed(2);
+
+      statusEl.textContent = '正在生成GIF...';
+
+      /* 第四步：执行FFmpeg命令合成GIF */
+      /*
+       * -framerate: 设置输入帧率（由帧延迟计算得出）
+       * -i frame_%03d.png: 读取序号格式的帧图片序列
+       * -vf "scale={w}:-1:flags=lanczos": 缩放到指定宽度，高度自动等比计算，使用lanczos高质量缩放
+       * -loop {loop}: 设置循环次数（0=无限循环）
+       * output.gif: 输出GIF文件名
+       */
+      await this.ffmpegLoader.exec([
+        '-framerate', framerate,
+        '-i', 'frame_%03d.png',
+        '-vf', `scale=${outputWidth}:-1:flags=lanczos`,
+        '-loop', String(loopCount),
+        'output.gif',
+      ]);
+
+      statusEl.textContent = '正在读取输出文件...';
+
+      /* 第五步：从虚拟文件系统读取生成的GIF文件 */
+      const gifData = await this.ffmpegLoader.readFile('output.gif');
+      const gifBlob = new Blob([gifData.slice()], { type: 'image/gif' });
+
+      /* 第六步：触发GIF文件下载 */
+      const url = URL.createObjectURL(gifBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'output.gif';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      statusEl.textContent = `GIF制作完成！共${this.gifMakerFiles.length}帧，大小：${this.formatFileSize(gifBlob.size)}`;
+      statusEl.style.color = 'var(--pc-neon-green)';
+
+      /* 第七步：清理虚拟文件系统中的临时帧文件和输出文件 */
+      for (let i = 0; i < this.gifMakerFiles.length; i++) {
+        const frameName = `frame_${String(i + 1).padStart(3, '0')}.png`;
+        await this.ffmpegLoader.deleteFile(frameName);
+      }
+      await this.ffmpegLoader.deleteFile('output.gif');
+
+    } catch (error) {
+      statusEl.textContent = `GIF制作失败: ${error}`;
+      statusEl.style.color = 'var(--pc-hot-pink)';
+    } finally {
+      this.gifMakerProcessing = false;
+      startBtn.disabled = false;
+    }
+  }
+
+  // ================================================================
+  //  标签6: GIF分解 - 相关方法和事件绑定
+  // ================================================================
+
+  /** GIF分解面板上传的GIF文件 */
+  private gifSplitterFile: File | null = null;
+
+  /** GIF分解面板的处理状态，防止重复点击 */
+  private gifSplitterProcessing: boolean = false;
+
+  /** GIF分解后提取的帧数据数组，每个元素包含文件名和Blob */
+  private gifSplitterFrames: Array<{ name: string; blob: Blob }> = [];
+
+  /**
+   * 构建GIF分解面板的HTML
+   * 包含FFmpeg状态指示器、拖拽上传区域、输出格式选择、开始分解按钮、
+   * 分解结果显示区域和批量下载按钮
+   * @returns GIF分解面板的HTML字符串
+   */
+  private buildGifSplitterPanel(): string {
+    return `
+      <!-- FFmpeg加载状态指示器 -->
+      <div class="gifsplitter-ffmpeg-status" style="font-size:11px;color:var(--pc-neon-yellow);margin-bottom:6px;padding:4px 8px;border:1px solid var(--pc-dark-gray);background:rgba(0,0,0,0.5);">
+        FFmpeg 状态：未加载
+      </div>
+
+      <!-- 拖拽上传区域 - 仅支持单个GIF文件 -->
+      <div class="img-drop-zone gifsplitter-drop" style="border:2px dashed var(--pc-pink);padding:20px;text-align:center;margin-bottom:10px;cursor:pointer;color:var(--pc-gray);font-size:12px;">
+        📁 将GIF文件拖拽到这里，或点击选择文件（仅支持GIF）<br>
+        <input type="file" accept="image/gif" class="gifsplitter-file-input" style="display:none;">
+      </div>
+
+      <!-- 分解设置区域 -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;flex-wrap:wrap;">
+        <span style="color:var(--pc-gray);">输出格式:</span>
+        <select class="pc-select gifsplitter-format" style="width:100px;">
+          <option value="png">PNG</option>
+          <option value="jpg">JPEG</option>
+        </select>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+        <button class="glow-btn gifsplitter-start" style="padding:4px 16px;font-size:12px;">开始分解</button>
+        <button class="pc-btn gifsplitter-download-all" style="padding:4px 16px;font-size:12px;display:none;">批量下载全部帧</button>
+        <span class="gifsplitter-status" style="font-size:12px;"></span>
+      </div>
+
+      <!-- 分解结果显示区域 - 显示提取的帧数和总大小 -->
+      <div class="gifsplitter-results" style="display:none;border:1px solid var(--pc-dark-gray);padding:8px;margin-bottom:10px;">
+        <div class="gifsplitter-info" style="font-size:12px;color:var(--pc-neon-green);margin-bottom:8px;"></div>
+        <div class="gifsplitter-frames-list" style="display:flex;flex-wrap:wrap;gap:6px;max-height:200px;overflow-y:auto;"></div>
+      </div>
+    `;
+  }
+
+  /**
+   * 绑定GIF分解面板的所有事件
+   * 包括FFmpeg状态监听、拖拽上传、文件选择、开始分解和批量下载按钮
+   * @param el 窗口内容区域的DOM根元素
+   */
+  private bindGifSplitterPanel(el: HTMLElement): void {
+    const dropZone = el.querySelector('.gifsplitter-drop') as HTMLElement;
+    const fileInput = el.querySelector('.gifsplitter-file-input') as HTMLInputElement;
+    const startBtn = el.querySelector('.gifsplitter-start') as HTMLElement;
+    const downloadAllBtn = el.querySelector('.gifsplitter-download-all') as HTMLElement;
+    const ffmpegStatus = el.querySelector('.gifsplitter-ffmpeg-status') as HTMLElement;
+
+    /* 监听FFmpeg加载状态变化，更新面板状态指示器 */
+    this.ffmpegLoader.onStatusChange((status: FFmpegLoadingStatus) => {
+      if (status === FFmpegLoadingStatus.READY) {
+        ffmpegStatus.textContent = 'FFmpeg 状态：已就绪';
+        ffmpegStatus.style.color = 'var(--pc-neon-green)';
+      } else if (status === FFmpegLoadingStatus.LOADING) {
+        ffmpegStatus.textContent = 'FFmpeg 状态：加载中...';
+        ffmpegStatus.style.color = 'var(--pc-neon-yellow)';
+      } else if (status === FFmpegLoadingStatus.ERROR) {
+        ffmpegStatus.textContent = 'FFmpeg 状态：加载失败';
+        ffmpegStatus.style.color = 'var(--pc-hot-pink)';
+      }
+    });
+
+    /* 点击拖拽区域打开文件选择 */
+    dropZone.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    /* 拖拽悬停高亮 */
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--pc-neon-green)';
+    });
+
+    /* 拖拽离开恢复 */
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.borderColor = 'var(--pc-pink)';
+    });
+
+    /* 拖拽放置GIF文件 */
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--pc-pink)';
+      const files = Array.from((e as DragEvent).dataTransfer?.files || []);
+      if (files.length > 0 && files[0].type === 'image/gif') {
+        this.gifSplitterFile = files[0];
+        const statusEl = el.querySelector('.gifsplitter-status') as HTMLElement;
+        statusEl.textContent = `已选择: ${files[0].name} (${this.formatFileSize(files[0].size)})`;
+        statusEl.style.color = 'var(--pc-neon-green)';
+      }
+    });
+
+    /* 文件选择后确认GIF文件 */
+    fileInput.addEventListener('change', () => {
+      const files = Array.from(fileInput.files || []);
+      if (files.length > 0 && files[0].type === 'image/gif') {
+        this.gifSplitterFile = files[0];
+        const statusEl = el.querySelector('.gifsplitter-status') as HTMLElement;
+        statusEl.textContent = `已选择: ${files[0].name} (${this.formatFileSize(files[0].size)})`;
+        statusEl.style.color = 'var(--pc-neon-green)';
+      }
+    });
+
+    /* 点击开始分解按钮 */
+    startBtn.addEventListener('click', async () => {
+      await this.doGifSplitter(el);
+    });
+
+    /* 点击批量下载全部帧按钮 */
+    downloadAllBtn.addEventListener('click', () => {
+      this.downloadGifSplitterResults();
+    });
+  }
+
+  /**
+   * 执行GIF分解流程
+   * 1. 加载FFmpeg核心
+   * 2. 将GIF文件写入虚拟文件系统
+   * 3. 执行FFmpeg命令逐帧分解
+   * 4. 循环读取所有分解后的帧文件
+   * 5. 显示分解结果并支持逐帧下载和批量下载
+   * @param el 窗口内容区域的DOM根元素
+   */
+  private async doGifSplitter(el: HTMLElement): Promise<void> {
+    /* 如果正在处理或没有选择GIF文件，直接返回 */
+    if (this.gifSplitterProcessing) return;
+    if (!this.gifSplitterFile) return;
+
+    this.gifSplitterProcessing = true;
+    this.gifSplitterFrames = [];
+
+    const startBtn = el.querySelector('.gifsplitter-start') as HTMLButtonElement;
+    const statusEl = el.querySelector('.gifsplitter-status') as HTMLElement;
+    const downloadAllBtn = el.querySelector('.gifsplitter-download-all') as HTMLButtonElement;
+    startBtn.disabled = true;
+    downloadAllBtn.style.display = 'none';
+    statusEl.textContent = '正在加载FFmpeg...';
+    statusEl.style.color = 'var(--pc-neon-yellow)';
+
+    try {
+      /* 第一步：加载FFmpeg核心 */
+      await this.ffmpegLoader.load();
+      statusEl.textContent = '正在写入GIF文件...';
+
+      /* 第二步：将GIF文件写入虚拟文件系统 */
+      await this.ffmpegLoader.writeFile('input.gif', this.gifSplitterFile);
+
+      /* 第三步：获取用户选择的输出格式 */
+      const format = (el.querySelector('.gifsplitter-format') as HTMLSelectElement).value;
+      /* 根据格式确定MIME类型 */
+      const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+
+      statusEl.textContent = '正在分解帧...';
+
+      /* 第四步：执行FFmpeg命令分解GIF
+       * -i input.gif: 读取输入的GIF文件
+       * -vsync vfr: 使用可变帧率模式，保留原始帧的时间戳信息
+       * output_%03d.{ext}: 输出文件序号命名，如output_001.png、output_002.png...
+       */
+      await this.ffmpegLoader.exec([
+        '-i', 'input.gif',
+        '-vsync', 'vfr',
+        `output_%03d.${format}`,
+      ]);
+
+      statusEl.textContent = '正在读取帧文件...';
+
+      /* 第五步：循环读取所有分解后的帧文件
+       * FFmpeg输出文件从output_001开始，依次递增
+       * 逐个尝试读取，直到读取失败（说明没有更多帧了）
+       */
+      let frameIndex = 1;
+      let totalSize = 0;
+      while (true) {
+        const frameName = `output_${String(frameIndex).padStart(3, '0')}.${format}`;
+        try {
+          /* 尝试从虚拟文件系统读取帧文件 */
+          const frameData = await this.ffmpegLoader.readFile(frameName);
+          const frameBlob = new Blob([frameData.slice()], { type: mimeType });
+          this.gifSplitterFrames.push({ name: frameName, blob: frameBlob });
+          totalSize += frameBlob.size;
+          frameIndex++;
+        } catch {
+          /* 读取失败说明已经没有更多帧了，退出循环 */
+          break;
+        }
+      }
+
+      /* 第六步：显示分解结果信息 */
+      const resultsDiv = el.querySelector('.gifsplitter-results') as HTMLElement;
+      const infoDiv = el.querySelector('.gifsplitter-info') as HTMLElement;
+      const framesList = el.querySelector('.gifsplitter-frames-list') as HTMLElement;
+
+      resultsDiv.style.display = 'block';
+      infoDiv.textContent = `分解完成！共提取 ${this.gifSplitterFrames.length} 帧，总大小：${this.formatFileSize(totalSize)}`;
+      framesList.innerHTML = '';
+
+      /* 为每帧生成缩略图卡片，包含下载按钮 */
+      this.gifSplitterFrames.forEach((frame, index) => {
+        const card = document.createElement('div');
+        card.style.cssText = 'border:1px solid var(--pc-dark-gray);padding:4px;background:var(--pc-black);width:80px;text-align:center;';
+
+        /* 帧序号 */
+        const idxSpan = document.createElement('div');
+        idxSpan.style.cssText = 'font-size:9px;color:var(--pc-neon-green);margin-bottom:2px;';
+        idxSpan.textContent = `#${String(index + 1).padStart(3, '0')}`;
+        card.appendChild(idxSpan);
+
+        /* 缩略图 */
+        const thumb = document.createElement('img');
+        thumb.src = URL.createObjectURL(frame.blob);
+        thumb.style.cssText = 'max-width:60px;max-height:60px;display:block;margin:0 auto 2px;image-rendering:pixelated;';
+        card.appendChild(thumb);
+
+        /* 单帧下载按钮 */
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'pc-btn';
+        dlBtn.style.cssText = 'font-size:9px;padding:2px 6px;margin-top:2px;';
+        dlBtn.textContent = '下载';
+        dlBtn.addEventListener('click', () => {
+          const url = URL.createObjectURL(frame.blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `frame_${String(index + 1).padStart(3, '0')}.${format}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        });
+        card.appendChild(dlBtn);
+
+        framesList.appendChild(card);
+      });
+
+      /* 显示批量下载按钮 */
+      downloadAllBtn.style.display = 'inline-block';
+      statusEl.textContent = `分解完成！共${this.gifSplitterFrames.length}帧`;
+      statusEl.style.color = 'var(--pc-neon-green)';
+
+      /* 第七步：清理虚拟文件系统中的临时文件 */
+      await this.ffmpegLoader.deleteFile('input.gif');
+      for (const frame of this.gifSplitterFrames) {
+        try {
+          await this.ffmpegLoader.deleteFile(frame.name);
+        } catch {
+          /* 忽略删除失败（文件可能已不存在） */
+        }
+      }
+
+    } catch (error) {
+      statusEl.textContent = `GIF分解失败: ${error}`;
+      statusEl.style.color = 'var(--pc-hot-pink)';
+    } finally {
+      this.gifSplitterProcessing = false;
+      startBtn.disabled = false;
+    }
+  }
+
+  /**
+   * 批量下载GIF分解后的所有帧文件
+   * 逐帧创建临时<a>标签触发下载
+   */
+  private downloadGifSplitterResults(): void {
+    this.gifSplitterFrames.forEach((frame, index) => {
+      const url = URL.createObjectURL(frame.blob);
+      const a = document.createElement('a');
+      a.href = url;
+      /* 从帧文件名中提取扩展名（如.png或.jpg） */
+      const ext = frame.name.split('.').pop() || 'png';
+      a.download = `frame_${String(index + 1).padStart(3, '0')}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  // ================================================================
+  //  标签7: 添加水印 - 相关方法和事件绑定
+  // ================================================================
+
+  /** 添加水印面板已上传的图片文件列表 */
+  private watermarkFiles: File[] = [];
+
+  /** 添加水印面板的处理状态，防止重复点击 */
+  private watermarkProcessing: boolean = false;
+
+  /**
+   * 构建添加水印面板的HTML
+   * 包含FFmpeg状态指示器、拖拽上传区域、水印文字输入、字体大小、
+   * 颜色选择、位置选择、透明度设置和批量处理按钮
+   * @returns 添加水印面板的HTML字符串
+   */
+  private buildWatermarkPanel(): string {
+    return `
+      <!-- FFmpeg加载状态指示器 -->
+      <div class="watermark-ffmpeg-status" style="font-size:11px;color:var(--pc-neon-yellow);margin-bottom:6px;padding:4px 8px;border:1px solid var(--pc-dark-gray);background:rgba(0,0,0,0.5);">
+        FFmpeg 状态：未加载
+      </div>
+
+      <!-- 拖拽上传区域 - 支持多张图片 -->
+      <div class="img-drop-zone watermark-drop" style="border:2px dashed var(--pc-pink);padding:20px;text-align:center;margin-bottom:10px;cursor:pointer;color:var(--pc-gray);font-size:12px;">
+        📁 将图片拖拽到这里，或点击选择文件（支持多选）<br>
+        <input type="file" multiple accept="image/*" class="watermark-file-input" style="display:none;">
+      </div>
+
+      <!-- 水印参数设置区域 -->
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;font-size:12px;">
+
+        <!-- 第一行：水印文字输入和字体大小 -->
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="color:var(--pc-gray);">水印文字:</span>
+          <input type="text" class="pc-input watermark-text" value="PC-98" style="width:120px;">
+          <span style="color:var(--pc-gray);">字体大小:</span>
+          <input type="number" class="pc-input watermark-fontsize" value="24" min="8" max="200" style="width:60px;">
+          <span style="color:var(--pc-gray);">px</span>
+        </div>
+
+        <!-- 第二行：颜色选择、位置选择、透明度 -->
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="color:var(--pc-gray);">颜色:</span>
+          <input type="color" class="watermark-color" value="#FFFFFF" style="width:40px;height:24px;border:1px solid var(--pc-dark-gray);cursor:pointer;">
+          <span style="color:var(--pc-gray);margin-left:4px;">位置:</span>
+          <select class="pc-select watermark-position" style="width:80px;">
+            <option value="top-left">左上</option>
+            <option value="top-right">右上</option>
+            <option value="bottom-left">左下</option>
+            <option value="bottom-right">右下</option>
+            <option value="center">居中</option>
+          </select>
+          <span style="color:var(--pc-gray);margin-left:4px;">透明度:</span>
+          <input type="range" class="watermark-alpha" min="0" max="100" value="50" style="width:100px;accent-color:var(--pc-pink);">
+          <span class="watermark-alpha-value" style="color:var(--pc-white);">0.5</span>
+        </div>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+        <button class="glow-btn watermark-start" style="padding:4px 16px;font-size:12px;">批量处理</button>
+        <span class="watermark-status" style="font-size:12px;"></span>
+      </div>
+
+      <!-- 处理结果预览列表 -->
+      <div class="watermark-preview-list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+    `;
+  }
+
+  /**
+   * 绑定添加水印面板的所有事件
+   * 包括FFmpeg状态监听、拖拽上传、文件选择、透明度滑块、批量处理按钮
+   * @param el 窗口内容区域的DOM根元素
+   */
+  private bindWatermarkPanel(el: HTMLElement): void {
+    const dropZone = el.querySelector('.watermark-drop') as HTMLElement;
+    const fileInput = el.querySelector('.watermark-file-input') as HTMLInputElement;
+    const startBtn = el.querySelector('.watermark-start') as HTMLElement;
+    const alphaSlider = el.querySelector('.watermark-alpha') as HTMLInputElement;
+    const alphaValue = el.querySelector('.watermark-alpha-value') as HTMLElement;
+    const ffmpegStatus = el.querySelector('.watermark-ffmpeg-status') as HTMLElement;
+
+    /* 监听FFmpeg加载状态变化，更新面板状态指示器 */
+    this.ffmpegLoader.onStatusChange((status: FFmpegLoadingStatus) => {
+      if (status === FFmpegLoadingStatus.READY) {
+        ffmpegStatus.textContent = 'FFmpeg 状态：已就绪';
+        ffmpegStatus.style.color = 'var(--pc-neon-green)';
+      } else if (status === FFmpegLoadingStatus.LOADING) {
+        ffmpegStatus.textContent = 'FFmpeg 状态：加载中...';
+        ffmpegStatus.style.color = 'var(--pc-neon-yellow)';
+      } else if (status === FFmpegLoadingStatus.ERROR) {
+        ffmpegStatus.textContent = 'FFmpeg 状态：加载失败';
+        ffmpegStatus.style.color = 'var(--pc-hot-pink)';
+      }
+    });
+
+    /* 点击拖拽区域打开文件选择 */
+    dropZone.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    /* 拖拽悬停高亮 */
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--pc-neon-green)';
+    });
+
+    /* 拖拽离开恢复 */
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.borderColor = 'var(--pc-pink)';
+    });
+
+    /* 拖拽放置文件后收集图片 */
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--pc-pink)';
+      const files = Array.from((e as DragEvent).dataTransfer?.files || []);
+      this.handleWatermarkFiles(el, files);
+    });
+
+    /* 文件选择后收集图片 */
+    fileInput.addEventListener('change', () => {
+      const files = Array.from(fileInput.files || []);
+      this.handleWatermarkFiles(el, files);
+    });
+
+    /* 透明度滑块拖动时实时更新显示值（将0-100映射为0-1） */
+    alphaSlider.addEventListener('input', () => {
+      const val = parseInt(alphaSlider.value) / 100;
+      alphaValue.textContent = val.toFixed(2);
+    });
+
+    /* 点击批量处理按钮 */
+    startBtn.addEventListener('click', async () => {
+      await this.doWatermark(el);
+    });
+  }
+
+  /**
+   * 处理添加水印面板的上传文件
+   * 过滤出图片文件，更新状态文字
+   * @param el 窗口内容区域的DOM根元素
+   * @param files 用户选择的File对象数组
+   */
+  private handleWatermarkFiles(el: HTMLElement, files: File[]): void {
+    /* 过滤出图片类型的文件 */
+    this.watermarkFiles = files.filter(f => f.type.startsWith('image/'));
+
+    const statusEl = el.querySelector('.watermark-status') as HTMLElement;
+    statusEl.textContent = `已选择 ${this.watermarkFiles.length} 张图片`;
+    statusEl.style.color = 'var(--pc-neon-green)';
+  }
+
+  /**
+   * 使用Canvas API在图片上添加文字水印
+   * 作为FFmpeg drawtext滤镜不可用时的回退方案
+   * 在离屏Canvas上绘制图片和文字，然后导出为PNG
+   * @param file 原始图片文件
+   * @param text 水印文字内容
+   * @param fontSize 字体大小（像素）
+   * @param color 字体颜色（十六进制，如"#FFFFFF"）
+   * @param alpha 透明度（0到1之间）
+   * @param position 水印位置（左上/右上/左下/右下/居中）
+   * @returns 添加水印后的图片Blob
+   */
+  private async addWatermarkWithCanvas(
+    file: File,
+    text: string,
+    fontSize: number,
+    color: string,
+    alpha: number,
+    position: string
+  ): Promise<Blob> {
+    return new Promise<Blob>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          /* 创建与原图同尺寸的离屏Canvas */
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d')!;
+
+          /* 将原图绘制到Canvas上 */
+          ctx.drawImage(img, 0, 0);
+
+          /* 设置文字样式：字体大小、字体族、颜色和透明度 */
+          ctx.font = `${fontSize}px sans-serif`;
+          /* 将透明度应用到全局alpha通道 */
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = color;
+          /* 添加文字阴影效果，提高水印在各种背景上的可读性 */
+          ctx.shadowColor = 'rgba(0,0,0,0.5)';
+          ctx.shadowOffsetX = 1;
+          ctx.shadowOffsetY = 1;
+
+          /* 根据位置参数计算水印的x,y坐标 */
+          const padding = fontSize; /* 边距等于字体大小 */
+          const textWidth = ctx.measureText(text).width;
+          let x = 0;
+          let y = fontSize; /* 默认y坐标为文字基线位置 */
+
+          if (position === 'top-left') {
+            /* 左上角：坐标为(边距, 字体大小) */
+            x = padding;
+            y = fontSize + padding / 2;
+          } else if (position === 'top-right') {
+            /* 右上角：x坐标为画布宽度减去文字宽度减去边距 */
+            x = canvas.width - textWidth - padding;
+            y = fontSize + padding / 2;
+          } else if (position === 'bottom-left') {
+            /* 左下角：y坐标为画布高度减去边距 */
+            x = padding;
+            y = canvas.height - padding / 2;
+          } else if (position === 'bottom-right') {
+            /* 右下角 */
+            x = canvas.width - textWidth - padding;
+            y = canvas.height - padding / 2;
+          } else {
+            /* 居中：使用textAlign和textBaseline居中 */
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            x = canvas.width / 2;
+            y = canvas.height / 2;
+          }
+
+          /* 在Canvas上绘制水印文字 */
+          ctx.fillText(text, x, y);
+
+          /* 将Canvas导出为PNG格式的Blob */
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Canvas导出Blob失败'));
+            }
+          }, 'image/png');
+        };
+        img.src = reader.result as string;
+      };
+      reader.onerror = () => reject(new Error('文件读取失败'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /**
+   * 执行批量添加水印流程
+   * 首先尝试使用FFmpeg的drawtext滤镜添加水印，
+   * 如果FFmpeg不可用或drawtext滤镜失败，则回退到Canvas API实现
+   * @param el 窗口内容区域的DOM根元素
+   */
+  private async doWatermark(el: HTMLElement): Promise<void> {
+    /* 如果正在处理或没有上传图片，直接返回 */
+    if (this.watermarkProcessing) return;
+    if (this.watermarkFiles.length === 0) return;
+
+    this.watermarkProcessing = true;
+
+    const startBtn = el.querySelector('.watermark-start') as HTMLButtonElement;
+    const statusEl = el.querySelector('.watermark-status') as HTMLElement;
+    const previewList = el.querySelector('.watermark-preview-list') as HTMLElement;
+    startBtn.disabled = true;
+    previewList.innerHTML = '';
+
+    try {
+      /* 读取用户设置的水印参数 */
+      const text = (el.querySelector('.watermark-text') as HTMLInputElement).value || 'PC-98';
+      const fontSize = parseInt((el.querySelector('.watermark-fontsize') as HTMLInputElement).value) || 24;
+      const color = (el.querySelector('.watermark-color') as HTMLInputElement).value || '#FFFFFF';
+      const position = (el.querySelector('.watermark-position') as HTMLSelectElement).value;
+      const alphaValue = parseInt((el.querySelector('.watermark-alpha') as HTMLInputElement).value) / 100;
+
+      /*
+       * FFmpeg drawtext滤镜的坐标表达式
+       * - top-left: x=padding, y=padding
+       * - top-right: x=w-text_w-padding, y=padding
+       * - bottom-left: x=padding, y=h-th-padding
+       * - bottom-right: x=w-text_w-padding, y=h-th-padding
+       * - center: x=(w-text_w)/2, y=(h-th)/2
+       */
+      const coordinateMap: Record<string, string> = {
+        'top-left': `${fontSize},${fontSize}`,
+        'top-right': `w-text_w-${fontSize},${fontSize}`,
+        'bottom-left': `${fontSize},h-text_h-${fontSize}`,
+        'bottom-right': `w-text_w-${fontSize},h-text_h-${fontSize}`,
+        'center': '(w-text_w)/2,(h-text_h)/2',
+      };
+      const coordinates = coordinateMap[position] || coordinateMap['bottom-right'];
+
+      statusEl.textContent = `正在处理 0/${this.watermarkFiles.length}...`;
+      statusEl.style.color = 'var(--pc-neon-yellow)';
+
+      let completed = 0;
+      let useCanvasFallback = false;
+
+      /* 遍历每张图片，逐张添加水印 */
+      for (let i = 0; i < this.watermarkFiles.length; i++) {
+        const file = this.watermarkFiles[i];
+
+        if (useCanvasFallback) {
+          /* 如果FFmpeg不可用，使用Canvas回退方案 */
+          const resultBlob = await this.addWatermarkWithCanvas(file, text, fontSize, color, alphaValue, position);
+          this.renderWatermarkResult(el, file.name, resultBlob);
+        } else {
+          try {
+            /* 尝试使用FFmpeg drawtext滤镜添加水印 */
+            await this.ffmpegLoader.load();
+
+            /* 写入输入文件 */
+            await this.ffmpegLoader.writeFile(`watermark_input_${i}.png`, file);
+
+            /* 执行FFmpeg命令
+             * -i: 输入文件
+             * -vf drawtext: 视频滤镜，在图片上绘制文字
+             *   text: 水印文字内容
+             *   fontsize: 字体大小
+             *   fontcolor: 字体颜色（附加@透明度）
+             *   x,y: 水印位置坐标
+             */
+            await this.ffmpegLoader.exec([
+              '-i', `watermark_input_${i}.png`,
+              '-vf', `drawtext=text='${text}':fontsize=${fontSize}:fontcolor=${color}@${alphaValue.toFixed(2)}:x=${coordinates}:y=${coordinates}`,
+              `watermark_output_${i}.png`,
+            ]);
+
+            /* 读取输出文件 */
+            const outputData = await this.ffmpegLoader.readFile(`watermark_output_${i}.png`);
+            const resultBlob = new Blob([outputData.slice()], { type: 'image/png' });
+
+            /* 渲染结果到预览列表 */
+            this.renderWatermarkResult(el, file.name, resultBlob);
+
+            /* 清理虚拟文件系统中的临时文件 */
+            try {
+              await this.ffmpegLoader.deleteFile(`watermark_input_${i}.png`);
+              await this.ffmpegLoader.deleteFile(`watermark_output_${i}.png`);
+            } catch {
+              /* 忽略清理失败 */
+            }
+
+          } catch {
+            /* FFmpeg drawtext失败（可能缺少字体文件），切换到Canvas回退 */
+            useCanvasFallback = true;
+            const resultBlob = await this.addWatermarkWithCanvas(file, text, fontSize, color, alphaValue, position);
+            this.renderWatermarkResult(el, file.name, resultBlob);
+          }
+        }
+
+        /* 更新处理进度 */
+        completed++;
+        statusEl.textContent = `正在处理 ${completed}/${this.watermarkFiles.length}...`;
+      }
+
+      if (useCanvasFallback) {
+        statusEl.textContent = `处理完成（已回退到Canvas模式）！共${this.watermarkFiles.length}张`;
+      } else {
+        statusEl.textContent = `处理完成！共${this.watermarkFiles.length}张`;
+      }
+      statusEl.style.color = 'var(--pc-neon-green)';
+
+    } catch (error) {
+      statusEl.textContent = `水印处理失败: ${error}`;
+      statusEl.style.color = 'var(--pc-hot-pink)';
+    } finally {
+      this.watermarkProcessing = false;
+      startBtn.disabled = false;
+    }
+  }
+
+  /**
+   * 渲染添加水印后的单张结果卡片
+   * 创建包含缩略图、文件名和下载按钮的结果预览卡片
+   * @param el 窗口内容区域的DOM根元素
+   * @param originalName 原始文件名（用于生成输出文件名）
+   * @param resultBlob 添加水印后的图片Blob
+   */
+  private renderWatermarkResult(el: HTMLElement, originalName: string, resultBlob: Blob): void {
+    const previewList = el.querySelector('.watermark-preview-list') as HTMLElement;
+
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid var(--pc-dark-gray);padding:6px;background:var(--pc-black);width:120px;text-align:center;';
+
+    /* 结果缩略图 */
+    const thumb = document.createElement('img');
+    thumb.src = URL.createObjectURL(resultBlob);
+    thumb.style.cssText = 'max-width:100px;max-height:100px;display:block;margin:0 auto 4px;image-rendering:pixelated;';
+    card.appendChild(thumb);
+
+    /* 文件名（原文件名去掉扩展名 + _watermarked + .png） */
+    const nameSpan = document.createElement('div');
+    nameSpan.style.cssText = 'font-size:10px;color:var(--pc-gray);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    const baseName = originalName.replace(/\.[^.]+$/, '');
+    nameSpan.textContent = `${baseName.substring(0, 10)}_wm.png`;
+    card.appendChild(nameSpan);
+
+    /* 文件大小 */
+    const sizeSpan = document.createElement('div');
+    sizeSpan.style.cssText = 'font-size:10px;color:var(--pc-pink);';
+    sizeSpan.textContent = this.formatFileSize(resultBlob.size);
+    card.appendChild(sizeSpan);
+
+    /* 下载按钮 */
+    const dlBtn = document.createElement('button');
+    dlBtn.className = 'pc-btn';
+    dlBtn.style.cssText = 'font-size:10px;padding:2px 8px;margin-top:4px;';
+    dlBtn.textContent = '下载';
+    dlBtn.addEventListener('click', () => {
+      const url = URL.createObjectURL(resultBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${baseName}_watermarked.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+    card.appendChild(dlBtn);
+
+    previewList.appendChild(card);
   }
 
   // ================================================================
