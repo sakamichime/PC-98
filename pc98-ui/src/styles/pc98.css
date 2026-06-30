@@ -1,0 +1,565 @@
+/* PC-98 全局样式 - 模拟主播女孩重度依赖的复古电脑UI */
+
+/* 像素字体导入 - 使用Google Fonts的像素字体 */
+@import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=Silkscreen:wght@400;700&display=swap');
+
+/* === 全局重置与基础 === */
+:root {
+  /* 主色调 - 迷幻粉色系 */
+  --pc-bg: #1a0a1e;           /* 深紫色背景 */
+  --pc-desktop: #2d0a36;      /* 桌面背景 */
+  --pc-window-bg: #1e0e2e;   /* 窗口背景 */
+  --pc-window-title: #4a1068; /* 窗口标题栏 */
+  --pc-pink: #ff69b4;         /* 主粉色 */
+  --pc-hot-pink: #ff1493;     /* 深粉色 */
+  --pc-light-pink: #ffb6c1;   /* 浅粉色 */
+  --pc-neon-pink: #ff6ec7;    /* 霓虹粉 */
+  --pc-purple: #9932cc;       /* 紫色 */
+  --pc-deep-purple: #8b008b;  /* 深紫色 */
+  --pc-neon-blue: #00bfff;    /* 霓虹蓝 */
+  --pc-neon-green: #39ff14;   /* 霓虹绿 */
+  --pc-neon-yellow: #ffff00;  /* 霓虹黄 */
+  --pc-white: #f0e6f6;       /* 暖白色 */
+  --pc-gray: #8888aa;         /* 灰色 */
+  --pc-dark-gray: #444466;    /* 深灰色 */
+  --pc-black: #0a0a12;        /* 近黑色 */
+  --pc-border-light: #ff69b4; /* 亮边框 */
+  --pc-border-dark: #4a0060;  /* 暗边框 */
+  
+  /* 字体 */
+  --font-pixel: 'DotGothic16', monospace;
+  --font-ui: 'Silkscreen', 'DotGothic16', monospace;
+  
+  /* 尺寸 */
+  --titlebar-height: 24px;
+  --taskbar-height: 36px;
+  --icon-size: 48px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  image-rendering: pixelated;
+}
+
+body {
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  color: var(--pc-white);
+  background: var(--pc-bg);
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  cursor: default;
+  user-select: none;
+}
+
+/* === 桌面 === */
+#desktop {
+  width: 100vw;
+  height: calc(100vh - var(--taskbar-height));
+  background: var(--pc-desktop);
+  position: relative;
+  overflow: hidden;
+  /* CRT扫描线效果 */
+}
+
+/* CRT效果叠加层 */
+#desktop::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15) 0px,
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  pointer-events: none;
+  z-index: 900;
+}
+
+/* CRT曲面效果 */
+#desktop::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 60%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
+  pointer-events: none;
+  z-index: 899;
+}
+
+/* === 桌面图标 === */
+.desktop-icon {
+  position: absolute;
+  width: 72px;
+  text-align: center;
+  cursor: pointer;
+  padding: 4px;
+  border: 1px solid transparent;
+  transition: border-color 0.1s;
+}
+
+.desktop-icon:hover {
+  border-color: var(--pc-pink);
+}
+
+.desktop-icon.selected {
+  border-color: var(--pc-neon-blue);
+  background: rgba(0, 191, 255, 0.15);
+}
+
+.desktop-icon.dragging {
+  opacity: 0.7;
+  z-index: 5;
+  position: absolute;
+}
+
+/* === 桌面拉框选择 === */
+.selection-box {
+  position: absolute;
+  border: 1px dashed var(--pc-neon-blue);
+  background: rgba(0, 191, 255, 0.08);
+  z-index: 4;
+  pointer-events: none;
+}
+
+.desktop-icon .icon-image {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  margin: 0 auto 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  filter: drop-shadow(0 0 4px rgba(255, 105, 180, 0.5));
+}
+
+.desktop-icon .icon-label {
+  font-size: 11px;
+  color: var(--pc-white);
+  text-shadow: 
+    1px 1px 0 var(--pc-black),
+    -1px -1px 0 var(--pc-black),
+    1px -1px 0 var(--pc-black),
+    -1px 1px 0 var(--pc-black);
+  word-wrap: break-word;
+  line-height: 1.3;
+}
+
+/* === 窗口 === */
+.pc-window {
+  position: absolute;
+  background: var(--pc-window-bg);
+  border: 3px solid;
+  border-color: var(--pc-border-light) var(--pc-border-dark) var(--pc-border-dark) var(--pc-border-light);
+  box-shadow: 
+    inset 1px 1px 0 rgba(255, 255, 255, 0.1),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(255, 105, 180, 0.2);
+  min-width: 300px;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+}
+
+.pc-window.active {
+  z-index: 200;
+  box-shadow: 
+    inset 1px 1px 0 rgba(255, 255, 255, 0.15),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.3),
+    0 0 30px rgba(255, 105, 180, 0.4);
+}
+
+.pc-window.maximized {
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: calc(100vh - var(--taskbar-height)) !important;
+}
+
+/* 窗口标题栏 */
+.window-titlebar {
+  height: var(--titlebar-height);
+  background: linear-gradient(90deg, var(--pc-window-title), var(--pc-deep-purple));
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  cursor: move;
+  flex-shrink: 0;
+  border-bottom: 2px solid var(--pc-pink);
+}
+
+.window-titlebar .title-text {
+  flex: 1;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--pc-white);
+  text-shadow: 0 0 8px var(--pc-pink);
+  padding-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 窗口按钮 */
+.window-buttons {
+  display: flex;
+  gap: 2px;
+}
+
+.window-btn {
+  width: 18px;
+  height: 18px;
+  border: 2px solid;
+  border-color: var(--pc-border-light) var(--pc-border-dark) var(--pc-border-dark) var(--pc-border-light);
+  background: var(--pc-dark-gray);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--pc-white);
+  font-family: var(--font-ui);
+  line-height: 1;
+}
+
+.window-btn:active {
+  border-color: var(--pc-border-dark) var(--pc-border-light) var(--pc-border-light) var(--pc-border-dark);
+  padding: 1px 1px 0 0;
+}
+
+.window-btn.close {
+  background: #cc3366;
+}
+
+/* 窗口内容 */
+.window-content {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  font-size: 13px;
+}
+
+/* 窗口调整大小的边 */
+.window-resize {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: se-resize;
+}
+
+/* === 任务栏 === */
+#taskbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100vw;
+  height: var(--taskbar-height);
+  background: linear-gradient(180deg, #3a1050, #1a0525);
+  border-top: 2px solid var(--pc-pink);
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  gap: 4px;
+  z-index: 1000;
+}
+
+#taskbar .start-btn {
+  height: 28px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, var(--pc-pink), var(--pc-hot-pink));
+  border: 2px solid;
+  border-color: var(--pc-light-pink) var(--pc-deep-purple) var(--pc-deep-purple) var(--pc-light-pink);
+  color: var(--pc-white);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+#taskbar .start-btn:active {
+  border-color: var(--pc-deep-purple) var(--pc-light-pink) var(--pc-light-pink) var(--pc-deep-purple);
+}
+
+.taskbar-items {
+  flex: 1;
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.taskbar-item {
+  height: 28px;
+  padding: 0 8px;
+  background: var(--pc-dark-gray);
+  border: 2px solid;
+  border-color: var(--pc-border-light) var(--pc-border-dark) var(--pc-border-dark) var(--pc-border-light);
+  color: var(--pc-white);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 150px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.taskbar-item.active {
+  background: var(--pc-purple);
+  border-bottom-color: var(--pc-pink);
+}
+
+#taskbar .system-tray {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 2px inset var(--pc-dark-gray);
+  height: 28px;
+  font-size: 12px;
+  color: var(--pc-neon-green);
+}
+
+/* === 开始菜单 === */
+#start-menu {
+  position: fixed;
+  bottom: var(--taskbar-height);
+  left: 0;
+  width: 220px;
+  background: var(--pc-window-bg);
+  border: 3px solid;
+  border-color: var(--pc-border-dark) var(--pc-border-light) var(--pc-border-light) var(--pc-border-dark);
+  z-index: 1100;
+  display: none;
+  flex-direction: column;
+}
+
+#start-menu.visible {
+  display: flex;
+}
+
+.start-menu-header {
+  padding: 8px 12px;
+  background: linear-gradient(90deg, var(--pc-pink), var(--pc-purple));
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--pc-white);
+  text-shadow: 0 0 10px var(--pc-pink);
+  border-bottom: 2px solid var(--pc-pink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.start-menu-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-left: 3px solid transparent;
+}
+
+.start-menu-item:hover {
+  background: rgba(255, 105, 180, 0.2);
+  border-left-color: var(--pc-pink);
+}
+
+.start-menu-item .menu-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
+
+/* === 按钮通用样式 === */
+.pc-btn {
+  padding: 4px 16px;
+  background: linear-gradient(180deg, #5a2080, #3a1050);
+  border: 2px solid;
+  border-color: var(--pc-border-light) var(--pc-border-dark) var(--pc-border-dark) var(--pc-border-light);
+  color: var(--pc-white);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pc-btn:hover {
+  background: linear-gradient(180deg, #7a30a0, #5a2080);
+}
+
+.pc-btn:active {
+  border-color: var(--pc-border-dark) var(--pc-border-light) var(--pc-border-light) var(--pc-border-dark);
+}
+
+/* === 输入框通用样式 === */
+.pc-input {
+  background: var(--pc-black);
+  border: 2px inset var(--pc-dark-gray);
+  color: var(--pc-neon-green);
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  padding: 4px 8px;
+  outline: none;
+  width: 100%;
+}
+
+.pc-input:focus {
+  border-color: var(--pc-pink);
+  box-shadow: 0 0 8px rgba(255, 105, 180, 0.3);
+}
+
+/* === 滚动条 === */
+::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--pc-black);
+  border: 1px solid var(--pc-dark-gray);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--pc-dark-gray);
+  border: 2px solid;
+  border-color: var(--pc-border-light) var(--pc-border-dark) var(--pc-border-dark) var(--pc-border-light);
+}
+
+::-webkit-scrollbar-button {
+  background: var(--pc-dark-gray);
+  border: 2px solid;
+  border-color: var(--pc-border-light) var(--pc-border-dark) var(--pc-border-dark) var(--pc-border-light);
+  height: 16px;
+}
+
+/* === 选择框/下拉 === */
+.pc-select {
+  background: var(--pc-black);
+  border: 2px inset var(--pc-dark-gray);
+  color: var(--pc-neon-green);
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  padding: 4px 8px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* === 进度条 === */
+.pc-progress {
+  height: 20px;
+  background: var(--pc-black);
+  border: 2px inset var(--pc-dark-gray);
+  overflow: hidden;
+}
+
+.pc-progress .bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--pc-hot-pink), var(--pc-pink));
+  transition: width 0.3s;
+  box-shadow: 0 0 8px var(--pc-pink);
+}
+
+/* === 闪烁光标效果 === */
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.cursor-blink {
+  animation: blink 1s infinite;
+}
+
+/* === 霓虹发光文字 === */
+.neon-text {
+  text-shadow: 
+    0 0 4px currentColor,
+    0 0 8px currentColor,
+    0 0 16px currentColor;
+}
+
+/* === 粉色发光按钮 === */
+.glow-btn {
+  background: linear-gradient(180deg, var(--pc-pink), var(--pc-hot-pink));
+  box-shadow: 0 0 10px var(--pc-pink);
+  color: var(--pc-white);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  padding: 6px 20px;
+  border: none;
+  cursor: pointer;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.glow-btn:hover {
+  box-shadow: 0 0 20px var(--pc-pink), 0 0 40px rgba(255, 105, 180, 0.3);
+}
+
+/* === 状态栏 === */
+.status-bar {
+  height: 20px;
+  background: var(--pc-black);
+  border-top: 2px solid var(--pc-pink);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--pc-gray);
+  gap: 8px;
+}
+
+/* === 右键菜单 === */
+.context-menu {
+  position: fixed;
+  background: var(--pc-window-bg);
+  border: 2px solid;
+  border-color: var(--pc-border-light) var(--pc-border-dark) var(--pc-border-dark) var(--pc-border-light);
+  z-index: 1200;
+  min-width: 160px;
+  padding: 4px 0;
+  box-shadow: 0 0 15px rgba(255, 105, 180, 0.3);
+}
+
+.context-menu-item {
+  padding: 4px 24px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-menu-item:hover {
+  background: rgba(255, 105, 180, 0.2);
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: var(--pc-pink);
+  margin: 4px 0;
+  opacity: 0.5;
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NEC PC-9821</title>
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  </head>
+  <body>
+    <!-- 桌面区域 -->
+    <div id="desktop"></div>
+
+    <!-- 任务栏 -->
+    <div id="taskbar">
+      <button class="start-btn">▶ START</button>
+      <div class="taskbar-items"></div>
+      <div class="system-tray">
+        <span id="system-date"></span>
+        <span id="system-clock"></span>
+      </div>
+    </div>
+
+    <!-- 开始菜单 -->
+    <div id="start-menu">
+      <div class="start-menu-header">🖥️ PC-98 Workstation</div>
+      <div class="start-menu-item" data-app="internet">
+        <span class="menu-icon">🌐</span>
+        <span>互联网</span>
+      </div>
+      <div class="start-menu-item" data-app="filemanager">
+        <span class="menu-icon">📁</span>
+        <span>文件管理器</span>
+      </div>
+      <div class="start-menu-item" data-app="notepad">
+        <span class="menu-icon">📝</span>
+        <span>记事本</span>
+      </div>
+      <div class="start-menu-item" data-app="terminal">
+        <span class="menu-icon">💻</span>
+        <span>MS-DOS提示符</span>
+      </div>
+      <div class="start-menu-item" data-app="image-tools">
+        <span class="menu-icon">🖼️</span>
+        <span>图片批量工具</span>
+      </div>
+      <div class="start-menu-item" data-app="video-tools">
+        <span class="menu-icon">🎬</span>
+        <span>视频批量工具</span>
+      </div>
+      <div class="start-menu-item" data-app="batch-rename">
+        <span class="menu-icon">📋</span>
+        <span>批量改名</span>
+      </div>
+      <div class="start-menu-item" data-app="software-nav">
+        <span class="menu-icon">🏪</span>
+        <span>软件导航站</span>
+      </div>
+      <div class="start-menu-item" data-app="settings">
+        <span class="menu-icon">⚙️</span>
+        <span>系统设置</span>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
