@@ -1,81 +1,53 @@
-/**
- * GitHub Actions 自动部署工作流
- * 
- * 这个文件定义了当推送代码到 main 分支时，自动构建项目并部署到 GitHub Pages 的流程。
- * 
- * 工作流程说明：
- * 1. 触发条件：当 main 分支有 push 事件时自动运行
- * 2. 权限：设置 pages 和 id-token 写入权限，用于部署
- * 3. 构建：安装依赖 → TypeScript编译 → Vite打包 → 将构建产物上传为 artifact
- * 4. 部署：使用 GitHub Pages 的部署操作，将 artifact 发布到 gh-pages 分支
- * 
- * 部署完成后，网站将可以通过以下地址访问：
- * https://<username>.github.io/<repo-name>/
- */
+# GitHub Actions 自动部署工作流
+# 推送到 main 分支时自动构建并部署到 GitHub Pages
+# 部署完成后通过 https://pc98.cc.cd 访问
 
-name: 部署到GitHub Pages
+name: Deploy to GitHub Pages
 
-# 触发条件：推送到 main 分支时自动运行
 on:
   push:
     branches: ['main']
 
-# 设置 GitHub Pages 所需的权限
 permissions:
-  pages: write       # 允许写入 GitHub Pages
-  id-token: write    # 允许生成部署令牌
+  pages: write
+  id-token: write
 
-# 只允许同时运行一个部署工作流，避免冲突
 concurrency:
-  group: 'pages'
+  group: pages
   cancel-in-progress: false
 
 jobs:
-  # ===== 构建任务 =====
-  # 在 Ubuntu 环境中安装依赖并构建项目
   build:
     runs-on: ubuntu-latest
     steps:
-      # 第1步：拉取仓库代码
-      - name: 拉取代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 第2步：设置 Node.js 环境
-      # 使用 Node.js 20.x LTS 版本，缓存 npm 依赖加速后续构建
-      - name: 设置 Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: pc98-ui/package.json
 
-      # 第3步：安装项目依赖
-      - name: 安装依赖
+      - name: Install dependencies
         run: cd pc98-ui && npm ci
 
-      # 第4步：构建项目
-      # 执行 tsc 编译 TypeScript，然后执行 vite build 打包
-      - name: 构建项目
+      - name: Build
         run: cd pc98-ui && npm run build
 
-      # 第5步：上传构建产物
-      # 将 dist 目录作为 artifact 上传，供部署任务使用
-      - name: 上传构建产物
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: pc98-ui/dist
 
-  # ===== 部署任务 =====
-  # 依赖构建任务完成后，将构建产物部署到 GitHub Pages
   deploy:
-    # 需要构建任务先完成
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # 部署到 GitHub Pages
-      - name: 部署到 GitHub Pages
+      - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
