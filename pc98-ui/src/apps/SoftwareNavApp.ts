@@ -509,8 +509,8 @@ export class SoftwareNavApp {
 
     /* ----- 项目卡片点击事件（使用事件委托） ----- */
     /* 在项目列表容器上监听点击事件，通过closest()判断点击目标是否是项目卡片 */
-    const projectList = el.querySelector('.project-list');
-    projectList?.addEventListener('click', (e: MouseEvent) => {
+    const projectList = el.querySelector('.project-list') as HTMLElement;
+    projectList.addEventListener('click', (e) => {
       /* 从点击目标向上查找带有project-card类的最近祖先元素 */
       const card = (e.target as HTMLElement).closest('.project-card');
       if (card) {
@@ -524,7 +524,7 @@ export class SoftwareNavApp {
     });
 
     /* ----- 项目卡片鼠标悬停效果（使用事件委托） ----- */
-    projectList?.addEventListener('mouseover', (e: MouseEvent) => {
+    projectList?.addEventListener('mouseover', (e) => {
       /* 鼠标移入卡片时，高亮边框为粉色 */
       const card = (e.target as HTMLElement).closest('.project-card');
       if (card) {
@@ -533,7 +533,7 @@ export class SoftwareNavApp {
       }
     });
 
-    projectList?.addEventListener('mouseout', (e: MouseEvent) => {
+    projectList?.addEventListener('mouseout', (e) => {
       /* 鼠标移出卡片时，恢复默认深灰边框和透明背景 */
       const card = (e.target as HTMLElement).closest('.project-card');
       if (card) {

@@ -295,7 +295,7 @@ export class FileManagerApp {
   /**
    * 打开文本文件
    */
-  private openTextFile(filename: string, parentEl: HTMLElement): void {
+  private openTextFile(filename: string, _parentEl: HTMLElement): void {
     const folder = this.getFolderByPath(this.currentPath);
     const file = folder?.children?.find(f => f.name === filename);
     if (!file || !file.content) return;
@@ -316,7 +316,7 @@ export class FileManagerApp {
   /**
    * 显示文件属性
    */
-  private showFileProperties(filename: string, parentEl: HTMLElement): void {
+  private showFileProperties(filename: string, _parentEl: HTMLElement): void {
     const folder = this.getFolderByPath(this.currentPath);
     const file = folder?.children?.find(f => f.name === filename);
     if (!file) return;

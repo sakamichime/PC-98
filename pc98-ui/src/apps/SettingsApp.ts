@@ -162,14 +162,14 @@ export class SettingsApp {
         const target = (tab as HTMLElement).dataset.tab;
         
         // 更新标签样式
-        el.querySelectorAll('.settings-tab').forEach(t => {
-          t.style.color = 'var(--pc-gray)';
-          t.style.background = 'transparent';
-          t.style.borderLeftColor = 'transparent';
+        el.querySelectorAll('.settings-tab').forEach((t) => {
+          (t as HTMLElement).style.color = 'var(--pc-gray)';
+          (t as HTMLElement).style.background = 'transparent';
+          (t as HTMLElement).style.borderLeftColor = 'transparent';
         });
-        tab.style.color = 'var(--pc-pink)';
-        tab.style.background = 'rgba(255,105,180,0.2)';
-        tab.style.borderLeftColor = 'var(--pc-pink)';
+        (tab as HTMLElement).style.color = 'var(--pc-pink)';
+        (tab as HTMLElement).style.background = 'rgba(255,105,180,0.2)';
+        (tab as HTMLElement).style.borderLeftColor = 'var(--pc-pink)';
 
         // 显示对应页面
         el.querySelectorAll('.settings-page').forEach(p => p.setAttribute('style', 'display:none;'));
@@ -186,10 +186,10 @@ export class SettingsApp {
           this.settings.themeColor = color;
           (document.getElementById('desktop') as HTMLElement).style.background = color;
           // 更新选中边框
-          el.querySelectorAll('.color-option').forEach(o => {
-            o.style.borderColor = 'var(--pc-dark-gray)';
+          el.querySelectorAll('.color-option').forEach((o) => {
+            (o as HTMLElement).style.borderColor = 'var(--pc-dark-gray)';
           });
-          opt.style.borderColor = 'var(--pc-pink)';
+          (opt as HTMLElement).style.borderColor = 'var(--pc-pink)';
         }
       });
     });

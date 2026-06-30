@@ -92,9 +92,6 @@ export class VideoToolsApp {
   /** 当前是否正在处理视频（防止重复点击开始按钮） */
   private isProcessing: boolean = false;
 
-  /** 当前标签页索引，0=批量转格式，1=批量压缩 */
-  private currentTab: number = 0;
-
   /**
    * 分辨率预设数组 - 提供四种分辨率选项
    * 原始分辨率不缩放，720p/480p/360p会降低分辨率以减小文件大小
@@ -397,9 +394,6 @@ export class VideoToolsApp {
    * @param tabIndex - 要切换到的标签索引（0=批量转格式，1=批量压缩）
    */
   private switchTab(el: HTMLElement, tabIndex: number): void {
-    /* 更新当前标签索引 */
-    this.currentTab = tabIndex;
-
     /* 遍历所有标签按钮，更新选中状态的视觉样式 */
     el.querySelectorAll('.tab-btn').forEach((btn) => {
       const btnIndex = parseInt((btn as HTMLElement).dataset.tab || '0', 10);
@@ -681,9 +675,6 @@ export class VideoToolsApp {
     /* 更新状态栏 */
     this.updateStatus(el, '开始批量转换...');
 
-    /* 获取转格式面板中的进度显示元素 */
-    const progressEl = el.querySelector('.vt-panel-convert .vt-progress') as HTMLElement;
-
     /* 逐个处理文件 */
     for (let i = 0; i < this.convertFiles.length; i++) {
       const fileInfo = this.convertFiles[i];
@@ -823,8 +814,8 @@ export class VideoToolsApp {
    */
   private processVideo(
     fileInfo: VideoFileInfo,
-    el: HTMLElement,
-    mode: string,
+    _el: HTMLElement,
+    _mode: string,
     targetWidth: number,
     targetHeight: number,
     bitrate: number | undefined
@@ -856,8 +847,6 @@ export class VideoToolsApp {
         /* 获取视频的原始宽度和高度 */
         const originalWidth = video.videoWidth;
         const originalHeight = video.videoHeight;
-        /* 获取视频的总时长（秒） */
-        const duration = video.duration;
 
         /**
          * 计算实际的目标宽度和高度

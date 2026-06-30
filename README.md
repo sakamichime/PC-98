@@ -1,109 +1,30 @@
-# PC-98 模拟器 UI
+# PC-98 模拟器
 
-NEC PC-9821 复古计算机模拟器界面，使用 TypeScript + Vite 实现。迷幻粉色+深紫色系的PC-98复古桌面环境。
+NEC PC-9821 复古计算机模拟器，使用 TypeScript + Vite 构建，部署在 GitHub Pages。
 
-## 项目结构
+## 功能
 
-```
-PC-98/
-├── pc98-ui/                          # PC-98模拟器UI项目（TypeScript + Vite）
-│   ├── src/
-│   │   ├── styles/
-│   │   │   └── pc98.css              # 全局样式（PC-98复古UI、CRT扫描线、迷幻粉色系）
-│   │   ├── core/
-│   │   │   └── WindowManager.ts      # 窗口管理器核心（创建/拖拽/缩放/层级/任务栏）
-│   │   ├── apps/
-│   │   │   ├── InternetApp.ts        # 互联网浏览器（首页/热门/论坛/百科/搜索）
-│   │   │   ├── FileManagerApp.ts     # 文件管理器（树形目录/虚拟文件系统）
-│   │   │   ├── NotepadApp.ts         # 记事本（文本编辑/字数统计/本地存储）
-│   │   │   ├── TerminalApp.ts        # MS-DOS终端（支持14种DOS命令）
-│   │   │   ├── SettingsApp.ts        # 系统设置（显示/声音/CRT特效/系统信息）
-│   │   │   ├── ImageToolsApp.ts      # 图片批量工具（分辨率/压缩/Base64/格式转换）
-│   │   │   ├── VideoToolsApp.ts      # 视频批量工具（转格式/压缩）
-│   │   │   ├── BatchRenameApp.ts     # 批量文件改名（查找替换/前缀后缀/序号/大小写）
-│   │   │   └── SoftwareNavApp.ts     # 软件导航站（GitHub项目推荐/分类浏览/搜索）
-│   │   └── main.ts                   # 主入口（桌面图标/拖拽/开始菜单/右键菜单/时钟）
-│   ├── index.html                    # HTML入口模板
-│   ├── package.json                  # 项目配置
-│   ├── tsconfig.json                 # TypeScript配置
-│   └── vite.config.ts                # Vite构建配置
-├── docs/                             # 项目文档
-├── .trae/                            # IDE配置
-├── AGENTS.md                         # Agent技能配置
-└── README.md                         # 本文件
-```
+- 📁 文件管理器 - 树形目录浏览、文件属性查看
+- 🌐 互联网浏览器 - 5个预设页面、导航历史、书签
+- 📝 记事本 - 文本编辑、字数统计、本地存储
+- 💻 MS-DOS终端 - 14种DOS命令、命令历史
+- ⚙️ 系统设置 - CRT效果开关、背景色、分辨率
+- 🖼️ 图片批量工具 - 缩放/压缩/Base64/格式转换（纯前端Canvas本地计算）
+- 🎬 视频批量工具 - 转格式/压缩（纯前端MediaRecorder本地计算）
+- 📋 批量改名 - 查找替换/前缀后缀/序号/大小写
+- 🏪 软件导航站 - 30+ GitHub开源项目推荐
 
-## 功能说明
+## 在线体验
 
-### 桌面系统
-- 9个桌面图标，支持拖拽移动、单击选中、双击打开
-- 开始菜单（START按钮）
-- 右键菜单（刷新桌面/排列图标/新建文件夹/新建文本文件/系统设置/关于）
-- CRT扫描线和曲面效果（可在设置中开关）
-- 浮动装饰动画
-- 系统时钟
+👉 [点击这里访问](https://pc98.cc.cd/)
 
-### 互联网浏览器
-- 地址栏导航
-- 前进/后退/刷新/主页
-- 书签栏
-- 5个预设网页（首页/热门站点/论坛/百科/搜索）
-- 404页面
-- PC-98复古计算主题内容
+## 技术栈
 
-### 文件管理器
-- 树形目录浏览
-- 文件列表排序
-- 虚拟文件系统（模拟C盘结构）
-- 双击打开文本文件
-- 文件属性查看
+- TypeScript
+- Vite
+- 纯前端实现，无需后端服务
 
-### 记事本
-- 文本编辑
-- 字数/行数统计
-- 本地存储保存/加载
-
-### MS-DOS终端
-- 支持命令：HELP, VER, DATE, TIME, CLS, DIR, ECHO, COLOR, TYPE, TREE, MEM, SYSTEM, ABOUT, EXIT
-- 命令历史（上下箭头翻阅）
-- ASCII art欢迎画面
-- 可切换文字颜色
-
-### 系统设置
-- 桌面背景色切换
-- 分辨率选择
-- 像素字体开关
-- CRT效果开关和强度调节
-- 音量控制
-- 系统信息展示
-
-### 图片批量工具
-- 自定义分辨率：批量调整图片尺寸，支持保持宽高比
-- 图片压缩：JPEG/PNG/WebP格式输出，质量滑块调节
-- 复制Base64：一键复制图片Base64编码到剪贴板
-- 批量改格式：PNG/JPEG/WebP互转
-- 纯前端Canvas API实现
-
-### 视频批量工具
-- 批量转格式：视频转WebM格式
-- 批量压缩：可调分辨率（720p/480p/360p）和比特率
-- 使用video+canvas+MediaRecorder纯前端方案
-
-### 批量改名
-- 查找替换（支持正则）
-- 添加前缀/后缀
-- 序号命名
-- 大小写转换
-- 实时预览改名结果
-- 冲突检测（重复文件名红色高亮）
-
-### 软件导航站
-- 30+个推荐GitHub开源项目
-- 8个分类（开发工具/前端框架/设计工具/效率工具/系统工具/终端工具/娱乐）
-- 搜索过滤功能
-- 点击直接打开GitHub链接
-
-## 启动方式
+## 本地开发
 
 ```bash
 cd pc98-ui
@@ -111,10 +32,24 @@ npm install
 npm run dev
 ```
 
-## 技术栈
-- TypeScript
-- Vite
-- 纯CSS（无框架依赖）
-- Canvas API（图片处理）
-- MediaRecorder API（视频处理）
-- Google Fonts（DotGothic16 + Silkscreen像素字体）
+## 构建
+
+```bash
+cd pc98-ui
+npm run build
+```
+
+构建产物在 `pc98-ui/dist/` 目录下。
+
+## 部署
+
+推送到 `main` 分支后，GitHub Actions 会自动构建并部署到 GitHub Pages。
+
+首次使用需要：
+1. 进入仓库 Settings → Pages
+2. Source 选择 "GitHub Actions"
+3. 等待自动部署完成
+
+## 许可证
+
+MIT

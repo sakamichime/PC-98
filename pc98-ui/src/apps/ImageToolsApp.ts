@@ -28,9 +28,6 @@ export class ImageToolsApp {
   /** 窗口管理器的引用，用于创建和管理窗口 */
   private wm: WindowManager;
 
-  /** 当前激活的标签页名称，默认为'resize'（自定义分辨率） */
-  private activeTab: string = 'resize';
-
   constructor(wm: WindowManager) {
     this.wm = wm;
   }
@@ -282,22 +279,22 @@ export class ImageToolsApp {
         const target = (tab as HTMLElement).dataset.tab;
 
         /* 清除所有标签的高亮样式 */
-        el.querySelectorAll('.img-tools-tab').forEach(t => {
-          t.style.background = 'transparent';
-          t.style.borderLeftColor = 'transparent';
+        el.querySelectorAll('.img-tools-tab').forEach((t) => {
+          (t as HTMLElement).style.background = 'transparent';
+          (t as HTMLElement).style.borderLeftColor = 'transparent';
         });
 
         /* 给当前点击的标签添加高亮样式 */
-        tab.style.background = 'rgba(255,105,180,0.3)';
-        tab.style.borderLeftColor = 'var(--pc-pink)';
+        (tab as HTMLElement).style.background = 'rgba(255,105,180,0.3)';
+        (tab as HTMLElement).style.borderLeftColor = 'var(--pc-pink)';
 
         /* 隐藏所有面板 */
-        el.querySelectorAll('.img-tools-panel').forEach(p => {
-          p.style.display = 'none';
+        el.querySelectorAll('.img-tools-panel').forEach((p) => {
+          (p as HTMLElement).style.display = 'none';
         });
 
         /* 显示对应的面板 */
-        const panel = el.querySelector(`.img-tools-panel[data-panel="${target}"]`);
+        const panel = el.querySelector(`.img-tools-panel[data-panel="${target}"]`) as HTMLElement;
         if (panel) {
           panel.style.display = 'block';
         }
@@ -425,7 +422,7 @@ export class ImageToolsApp {
     const list = el.querySelector('.resize-preview-list') as HTMLElement;
     list.innerHTML = '';
 
-    this.resizeImages.forEach((info, index) => {
+    this.resizeImages.forEach((info) => {
       const card = document.createElement('div');
       card.style.cssText = 'border:1px solid var(--pc-dark-gray);padding:6px;background:var(--pc-black);width:120px;text-align:center;';
 
@@ -683,7 +680,7 @@ export class ImageToolsApp {
 
     let completed = 0;
 
-    this.compressImages.forEach((info, index) => {
+    this.compressImages.forEach((info) => {
       /* 创建与原图同尺寸的Canvas（不改变分辨率，只改变编码质量） */
       const canvas = document.createElement('canvas');
       canvas.width = info.originalWidth;
@@ -769,12 +766,6 @@ export class ImageToolsApp {
     const fileInput = el.querySelector('.base64-file-input') as HTMLInputElement;
     const copyBtn = el.querySelector('.base64-copy') as HTMLElement;
     const withPrefix = el.querySelector('.base64-with-prefix') as HTMLInputElement;
-
-    /* 存储完整的Base64字符串（带前缀） */
-    let fullBase64 = '';
-
-    /* 存储纯Base64字符串（不带前缀） */
-    let rawBase64 = '';
 
     /* 点击拖拽区域打开文件选择 */
     dropZone.addEventListener('click', () => {

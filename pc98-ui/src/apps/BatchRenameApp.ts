@@ -256,7 +256,10 @@ export class BatchRenameApp {
 
     // 监听file input的change事件，当用户选择文件后处理文件列表
     fileInput.addEventListener('change', () => {
-      this.handleFiles(fileInput.files, el);
+      // 检查files是否为null，避免将null赋值给FileList类型参数
+      if (fileInput.files) {
+        this.handleFiles(fileInput.files, el);
+      }
     });
 
     // 拖拽事件 - 阻止浏览器默认的拖拽行为（防止直接打开文件）

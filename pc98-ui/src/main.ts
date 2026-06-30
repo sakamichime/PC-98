@@ -60,7 +60,7 @@ const desktopIcons: DesktopIcon[] = [
 function main(): void {
   // 获取桌面和任务栏容器DOM元素
   const desktop = document.getElementById('desktop')!;
-  const taskbarItems = document.querySelector('.taskbar-items')!;
+  const taskbarItems = document.querySelector('.taskbar-items') as HTMLElement;
 
   // 创建窗口管理器实例（负责所有窗口的创建/拖拽/缩放/层级管理）
   const wm = new WindowManager(desktop, taskbarItems);
@@ -148,7 +148,7 @@ function main(): void {
     });
 
     // 单击选中图标（仅在未拖拽时触发）
-    icon.addEventListener('click', (e: MouseEvent) => {
+    icon.addEventListener('click', (_e: MouseEvent) => {
       if (hasMoved) return; // 如果刚刚拖拽过就不算点击
       desktop.querySelectorAll('.desktop-icon').forEach(i => i.classList.remove('selected'));
       icon.classList.add('selected');
